@@ -1,78 +1,126 @@
 import { useEffect, useState } from "react";
+import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { auth, db } from "../firebase/firebaseConfig";
 import { useNavigate } from "react-router-dom";
 
 function InvoiceHistory() {
-  const [invoices, setInvoices] = useState([]);
-  const navigate = useNavigate();
+    const [invoices, setInvoices] = useState([]);
+    const navigate = useNavigate();
+    const [selectedInvoice, setSelectedInvoice] = useState(null);
 
-  // Şimdilik sahte veriler
-  useEffect(() => {
-    const mockData = [
-      {
-        id: "1",
-        customerName: "Ahmet Yılmaz",
-        date: "2025-06-10",
-        total: 450,
-      },
-      {
-        id: "2",
-        customerName: "Ayşe Demir",
-        date: "2025-06-08",
-        total: 1200,
-      },
-    ];
+    useEffect(() => {
+        const fetchInvoices = async () => {
+            const user = auth.currentUser;
+            if (!user) return;
 
-    setInvoices(mockData);
-  }, []);
+            const q = query(
+                collection(db, "invoices"),
+                where("userId", "==", user.uid),
+                orderBy("createdAt", "desc")
+            );
 
-  return (
-    <div className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-3xl mx-auto bg-white p-6 rounded shadow">
-        <h2 className="text-2xl font-bold mb-4">Fatura Geçmişi</h2>
+            const snapshot = await getDocs(q);
+            const data = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+            }));
 
-        {invoices.length === 0 ? (
-          <p>Henüz fatura oluşturulmamış.</p>
-        ) : (
-          <table className="w-full border">
-            <thead>
-              <tr className="bg-gray-200">
-                <th className="p-2 border">Tarih</th>
-                <th className="p-2 border">Müşteri</th>
-                <th className="p-2 border">Toplam</th>
-                <th className="p-2 border">İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((invoice) => (
-                <tr key={invoice.id}>
-                  <td className="p-2 border">{invoice.date}</td>
-                  <td className="p-2 border">{invoice.customerName}</td>
-                  <td className="p-2 border">{invoice.total}₺</td>
-                  <td className="p-2 border text-center">
-                    <button className="text-blue-600 underline text-sm mr-2">
-                      Görüntüle
+            setInvoices(data);
+        };
+
+        fetchInvoices();
+    }, []);
+
+    const formatDate = (timestamp) => {
+        if (!timestamp?.toDate) return "-";
+        const date = timestamp.toDate();
+        return date.toLocaleDateString("tr-TR");
+    };
+
+    return (
+        <div className="min-h-screen bg-gray-100 p-6">
+            <div className="max-w-4xl mx-auto bg-white p-6 rounded shadow">
+                <h2 className="text-2xl font-bold mb-6">Fatura Geçmişi</h2>
+
+                {invoices.length === 0 ? (
+                    <p className="text-gray-600">Henüz hiç fatura oluşturulmamış.</p>
+                ) : (
+                    <table className="w-full border text-sm">
+                        <thead>
+                            <tr className="bg-gray-200 text-left">
+                                <th className="p-3 border">Fatura No</th>
+                                <th className="p-3 border">Müşteri</th>
+                                <th className="p-3 border">Tarih</th>
+                                <th className="p-3 border">Toplam Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {invoices.map((inv, index) => (
+                                <tr
+                                    key={inv.id}
+                                    className="hover:bg-gray-50 cursor-pointer"
+                                    onClick={() => setSelectedInvoice(inv)}
+                                >
+                                    <td className="p-3 border">#{index + 1}</td>
+                                    <td className="p-3 border">{inv.customerName}</td>
+                                    <td className="p-3 border">{formatDate(inv.createdAt)}</td>
+                                    <td className="p-3 border">{inv.total.toFixed(2)} ₺</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+                {selectedInvoice && (
+                    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded shadow-lg w-full max-w-md relative">
+                            <h2 className="text-xl font-bold mb-2">Fatura Detayı</h2>
+                            <p className="mb-1">
+                                <strong>Müşteri:</strong> {selectedInvoice.customerName}
+                            </p>
+                            <p className="mb-3">
+                                <strong>Tarih:</strong>{" "}
+                                {selectedInvoice.createdAt?.toDate().toLocaleDateString("tr-TR")}
+                            </p>
+
+                            <div className="mb-3">
+                                <strong>Ürünler:</strong>
+                                <ul className="list-disc ml-5 mt-1 text-sm">
+                                    {selectedInvoice.items.map((item, idx) => (
+                                        <li key={idx}>
+                                            {item.name} — {item.quantity} x {item.price} ₺
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+
+                            <p className="mb-4">
+                                <strong>Toplam:</strong> {selectedInvoice.total.toFixed(2)} ₺
+                            </p>
+
+                            <div className="text-right">
+                                <button
+                                    className="text-sm text-blue-600 underline"
+                                    onClick={() => setSelectedInvoice(null)}
+                                >
+                                    Kapat
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+
+                <div className="mt-6 text-center">
+                    <button
+                        onClick={() => navigate("/dashboard")}
+                        className="text-blue-500 underline"
+                    >
+                        ⬅️ Panele Dön
                     </button>
-                    <button className="text-red-600 underline text-sm">
-                      Sil
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="text-blue-500 underline"
-          >
-            ⬅️ Panele Dön
-          </button>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 export default InvoiceHistory;
